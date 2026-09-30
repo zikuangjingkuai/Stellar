@@ -80,7 +80,7 @@ object CloudStatusReporter {
             }
         }
 
-        // 设备序列号（走 shell）
+        // 设备序列号（走 shell；服务未连接时自动跳过）
         if (serviceRunning) {
             runCatching {
                 val p = Stellar.newProcess(arrayOf("sh", "-c", "getprop ro.serialno"), null, null)
